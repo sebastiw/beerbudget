@@ -45,7 +45,9 @@ import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock
 
 __CACHE_TIMEOUT__ = 6*24*3600
-__SYSTEMBOLAGET_URI__ = 'https://www.systembolaget.se/api/assortment/products/xml'
+__SYSTEMBOLAGET_SORTIMENT_URI__ = 'https://www.systembolaget.se/api/assortment/products/xml'
+__SYSTEMBOLAGET_BUTIKER_URI__ = 'https://www.systembolaget.se/api/assortment/stores/xml'
+__SYSTEMBOLAGET_MAPPNING_URI__ = 'https://www.systembolaget.se/api/assortment/stock/xml'
 
 class Beer:
     def __init__(self, name, price):
@@ -59,6 +61,8 @@ class Input:
     def __init__(self):
         self.params = None
         self.cache = 'cache.xml'
+        self.beers = []
+        self.searched_beers = []
 
         self.parser = argparse.ArgumentParser(description=__DOCSTRING__,
                                               formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -85,29 +89,46 @@ class Input:
         for i in range(len(self.params.beers)):
             name = " ".join(self.params.beers[i][0:-1])
             price = int(self.params.beers[i][-1])
-            self.params.beers[i] = Beer(name, price)
+            self.beers.append(Beer(name, price))
 
     def search(self):
         if len(self.params.search):
             self.check_cache()
             print("SEARCH...")
-            # build a tree structure
+            # Parse cache and search for beers
             with open(self.cache, "r") as file:
                 tree = ET.parse(file)
                 artiklar = tree.getroot().findall('artikel')
                 for artikel in artiklar:
                     for search in self.params.search:
                         p = re.compile(search, re.IGNORECASE)
-                        name = "%s %s" % (artikel.find('Namn').text,
-                                          artikel.find('Namn2').text)
-                        if p.match(name):
-                            print(name,
-                                  artikel.find('Volymiml').text,
-                                  artikel.find('Prisinklmoms').text,
-                                  artikel.find('Saljstart').text,
-                                  artikel.find('Forpackning').text,
-                                  artikel.find('Alkoholhalt').text)
+                        if artikel.find('Namn2').text:
+                            name = "%s %s" % (artikel.find('Namn').text,
+                                              artikel.find('Namn2').text)
+                        else:
+                            name = artikel.find('Namn').text
 
+                        if p.match(name):
+                            pris = artikel.find('Prisinklmoms').text
+                            self.searched_beers.append(Beer(name, pris))
+
+            # If there are multiple matches
+            for search in self.params.search:
+                p = re.compile(search, re.IGNORECASE)
+                matches = []
+                for beer in self.searched_beers:
+                    if p.match(beer.name):
+                        matches.append(beer)
+                if len(matches) > 1:
+                    # Let the user choose one
+                    print("Multiple matches! Choose one of")
+                    enum_beers = enumerate(matches)
+                    for i,beer in enum_beers:
+                        print(i, beer.name, beer.price)
+                    no = int(input('Choose an index: '))
+                    if no >= 0 and no < len(matches):
+                        print("Choosed %s" % matches[no].name)
+                        self.beers = matches[no]
 
     def check_cache(self):
         if (not os.path.isfile(self.cache) or
@@ -120,7 +141,7 @@ class Input:
 
     def download_systembolaget(self):
         print("Downloading cache")
-        r = requests.get(__SYSTEMBOLAGET_URI__)
+        r = requests.get(__SYSTEMBOLAGET_SORTIMENT_URI__)
         if r.status_code == 200:
             self.save_cache(r.text)
         else:
@@ -144,18 +165,18 @@ class Test:
         x.parse_args('30 --beer omnipollo 29 --beer svensk kronvodka 200 --systembolaget omnipollo leon'.split())
 
         assert x.params.budget == 30
-        assert x.params.beers[0].name == "omnipollo"
-        assert x.params.beers[0].price == 29
-        assert x.params.beers[1].name == "svensk kronvodka"
-        assert x.params.beers[1].price == 200
+        assert x.beers[0].name == "omnipollo"
+        assert x.beers[0].price == 29
+        assert x.beers[1].name == "svensk kronvodka"
+        assert x.beers[1].price == 200
         assert x.params.search[0] == "omnipollo leon"
 
         pass
 
     def download_test(self):
-        global __SYSTEMBOLAGET_URI__
-        uri = __SYSTEMBOLAGET_URI__
-        __SYSTEMBOLAGET_URI__ = 'http://dummyurl'
+        global __SYSTEMBOLAGET_SORTIMENT_URI__
+        uri = __SYSTEMBOLAGET_SORTIMENT_URI__
+        __SYSTEMBOLAGET_SORTIMENT_URI__ = 'http://dummyurl'
         x = Input()
         try:
             x.download_systembolaget()
