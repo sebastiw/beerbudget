@@ -1,8 +1,8 @@
-## Beer budget
+# Beer budget
 
 Find out how many beers you can buy without going over your budget.
 
-### Examples
+## Examples
 
 ```bash
 $ ./beerbudget.py 1000 --beer omnipollo leon 29
@@ -10,5 +10,5 @@ $ ./beerbudget.py 1000 --beer omnipollo leon 29
 Total: 986:-
 ```
 
-### Requirements
+## Requirements
 Python 3.6
