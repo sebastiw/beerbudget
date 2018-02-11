@@ -52,7 +52,7 @@ __SYSTEMBOLAGET_MAPPNING_URI__ = 'https://www.systembolaget.se/api/assortment/st
 class Beer:
     def __init__(self, name, price):
         self.name = name
-        self.price = price
+        self.price = float(price)
 
 
 class Input:
@@ -95,40 +95,8 @@ class Input:
         if len(self.params.search):
             self.check_cache()
             print("SEARCH...")
-            # Parse cache and search for beers
-            with open(self.cache, "r") as file:
-                tree = ET.parse(file)
-                artiklar = tree.getroot().findall('artikel')
-                for artikel in artiklar:
-                    for search in self.params.search:
-                        p = re.compile(search, re.IGNORECASE)
-                        if artikel.find('Namn2').text:
-                            name = "%s %s" % (artikel.find('Namn').text,
-                                              artikel.find('Namn2').text)
-                        else:
-                            name = artikel.find('Namn').text
-
-                        if p.match(name):
-                            pris = artikel.find('Prisinklmoms').text
-                            self.searched_beers.append(Beer(name, pris))
-
-            # If there are multiple matches
-            for search in self.params.search:
-                p = re.compile(search, re.IGNORECASE)
-                matches = []
-                for beer in self.searched_beers:
-                    if p.match(beer.name):
-                        matches.append(beer)
-                if len(matches) > 1:
-                    # Let the user choose one
-                    print("Multiple matches! Choose one of")
-                    enum_beers = enumerate(matches)
-                    for i,beer in enum_beers:
-                        print(i, beer.name, beer.price)
-                    no = int(input('Choose an index: '))
-                    if no >= 0 and no < len(matches):
-                        print("Choosed %s" % matches[no].name)
-                        self.beers = matches[no]
+            self.find_beers()
+            self.choose_multiple_matches()
 
     def check_cache(self):
         if (not os.path.isfile(self.cache) or
@@ -152,6 +120,60 @@ class Input:
         with open(self.cache, 'w') as file:
             file.write(content)
 
+    def find_beers(self):
+        """Parse cache and search for beers"""
+        with open(self.cache, "r") as file:
+            tree = ET.parse(file)
+            artiklar = tree.getroot().findall('artikel')
+            for artikel in artiklar:
+                for search in self.params.search:
+                    p = re.compile(search, re.IGNORECASE)
+                    if artikel.find('Namn2').text:
+                        name = "%s %s" % (artikel.find('Namn').text,
+                                          artikel.find('Namn2').text)
+                    else:
+                        name = artikel.find('Namn').text
+
+                    if p.match(name):
+                        pris = artikel.find('Prisinklmoms').text
+                        self.searched_beers.append(Beer(name, pris))
+
+    def choose_multiple_matches(self):
+        """If there are multiple matches"""
+        for search in self.params.search:
+            p = re.compile(search, re.IGNORECASE)
+            matches = []
+            for beer in self.searched_beers:
+                if p.match(beer.name):
+                    matches.append(beer)
+            if len(matches) > 1:
+                # Let the user choose one
+                print("Multiple matches! Choose one of")
+                enum_beers = enumerate(matches)
+                for i,beer in enum_beers:
+                    print(i, beer.name, beer.price)
+                no = int(input('Choose an index: '))
+                if no >= 0 and no < len(matches):
+                    self.beers.append(matches[no])
+
+
+    def find_bags(self):
+        bag = []
+        price = 1
+        price0 = 0
+        while price != price0 and price < self.params.budget:
+            price = price0
+            for beer in self.beers:
+                if price0+beer.price < self.params.budget:
+                    bag.append(beer)
+                    price0 += beer.price
+
+        total = 0
+        for beer in self.beers:
+            num = sum(b.name == beer.name for b in bag)
+            total += num*beer.price
+            print("%s %s (%s) %s SEK" % (num, beer.name, beer.price, num*beer.price))
+        print("Total: %s SEK" % total)
 
 class Test:
     def __init__(self):
@@ -215,3 +237,9 @@ if __name__=='__main__':
     x = Input()
     x.parse_args()
     x.search()
+
+    print("Choosed beers:")
+    for beer in x.beers:
+        print(beer.name, beer.price)
+
+    x.find_bags()
