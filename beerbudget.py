@@ -26,7 +26,7 @@ Total: 983:-
 5 bottles of vodka (1000:-)
 Total: 1000:-
 
->>> %(prog)s 1000 --systembolaget omnipollo leon
+>>> %(prog)s 1000 --search omnipollo leon
 Searching for "omnipollo leon"... Found 750ml for 49.90:-
 
 20 bottles of omnipollo leon (998:-)
@@ -72,7 +72,7 @@ class Input:
         self.parser.add_argument('--beer', dest='beers', action='append',
                                  help='Add a beer to the calculations.', nargs='+',
                                  metavar='NAME PRICE', default=[])
-        self.parser.add_argument('--systembolaget', dest='search', action='append',
+        self.parser.add_argument('--search', dest='search', action='append',
                                  help='Search for a beer to add from Systembolaget.',
                                  nargs='+', metavar='NAME', default=[])
 
@@ -184,7 +184,7 @@ class Test:
     def parse_arguments_test(self):
         """Testing reading input"""
         x = Input()
-        x.parse_args('30 --beer omnipollo 29 --beer svensk kronvodka 200 --systembolaget omnipollo leon'.split())
+        x.parse_args('30 --beer omnipollo 29 --beer svensk kronvodka 200 --search omnipollo leon'.split())
 
         assert x.params.budget == 30
         assert x.beers[0].name == "omnipollo"
