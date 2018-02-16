@@ -155,6 +155,8 @@ class Input:
                 no = int(input('Choose an index: '))
                 if no >= 0 and no < len(matches):
                     self.beers.append(matches[no])
+            else:
+                self.beers.append(matches[0])
 
 
     def find_bags(self):
