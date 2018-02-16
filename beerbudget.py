@@ -88,7 +88,7 @@ class Input:
     def parse_beers(self):
         for i in range(len(self.params.beers)):
             name = " ".join(self.params.beers[i][0:-1])
-            price = int(self.params.beers[i][-1])
+            price = float(self.params.beers[i][-1])
             self.beers.append(Beer(name, price))
 
     def search(self):
