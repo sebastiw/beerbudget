@@ -41,6 +41,7 @@ import requests
 import re
 
 import xml.etree.ElementTree as ET
+from decimal import Decimal
 
 from unittest.mock import MagicMock
 
@@ -52,7 +53,7 @@ __SYSTEMBOLAGET_MAPPING_URI__ = 'https://www.systembolaget.se/api/assortment/sto
 class Beer:
     def __init__(self, name, price):
         self.name = name
-        self.price = float(price)
+        self.price = Decimal(price)
 
 
 class Store:
@@ -101,7 +102,7 @@ class Input:
     def parse_beers(self):
         for i in range(len(self.params.beers)):
             name = " ".join(self.params.beers[i][0:-1])
-            price = float(self.params.beers[i][-1])
+            price = Decimal(self.params.beers[i][-1])
             self.beers.append(Beer(name, price))
 
     def search_beer(self):
@@ -217,10 +218,10 @@ class Input:
         bag = []
         price = 1
         price0 = 0
-        while price != price0 and price < self.params.budget:
+        while price != price0 and price <= self.params.budget:
             price = price0
             for beer in self.beers:
-                if price0+beer.price < self.params.budget:
+                if price0+beer.price <= self.params.budget:
                     bag.append(beer)
                     price0 += beer.price
 
