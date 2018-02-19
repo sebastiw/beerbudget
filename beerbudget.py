@@ -51,9 +51,10 @@ __SYSTEMBOLAGET_STORES_URI__ = 'https://www.systembolaget.se/api/assortment/stor
 __SYSTEMBOLAGET_MAPPING_URI__ = 'https://www.systembolaget.se/api/assortment/stock/xml'
 
 class Beer:
-    def __init__(self, name, price):
+    def __init__(self, name, price, nr=None):
         self.name = name
         self.price = Decimal(price)
+        self.nr = nr
 
 
 class Store:
@@ -74,6 +75,8 @@ class Input:
         self.store = None
         self.searched_beers = []
         self.searched_stores = []
+        self.beer_patterns = []
+        self.store_patterns = []
 
         self.parser = argparse.ArgumentParser(description=__DOCSTRING__,
                                               formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -86,9 +89,9 @@ class Input:
         self.parser.add_argument('--search', dest='search_beer', action='append',
                                  help='Search for a beer to add from Systembolaget.',
                                  nargs='+', metavar='NAME', default=[])
-        self.parser.add_argument('--systembolag', dest='search_store', action='store',
+        self.parser.add_argument('--systembolag', dest='search_store', action='append',
                                  help='Search for beers on a specific Systembolaget.',
-                                 nargs='+', metavar='NAME', default="")
+                                 nargs='+', metavar='NAME', default=[])
 
     def parse_args(self, args=None):
         self.params = self.parser.parse_args(args)
@@ -99,6 +102,9 @@ class Input:
         for i in range(len(self.params.search_beer)):
             self.params.search_beer[i] = " ".join(self.params.search_beer[i])
 
+        for i in range(len(self.params.search_store)):
+            self.params.search_store[i] = " ".join(self.params.search_store[i])
+
     def parse_beers(self):
         for i in range(len(self.params.beers)):
             name = " ".join(self.params.beers[i][0:-1])
@@ -107,18 +113,28 @@ class Input:
 
     def search_beer(self):
         if len(self.params.search_beer):
+            self.compile_beer_patterns()
             self.check_cache(self.assortment_cache, __SYSTEMBOLAGET_ASSORTMENT_URI__)
             self.find_beers()
             self.choose_multiple_beers()
 
     def search_store(self):
-        if len(self.params.search_store):
-            self.params.search_store = "".join(self.params.search_store)
-
+        if self.params.search_store:
+            self.compile_store_patterns()
             self.check_cache(self.stores_cache, __SYSTEMBOLAGET_STORES_URI__)
             self.check_cache(self.store_assortment_cache, __SYSTEMBOLAGET_MAPPING_URI__)
             self.find_store()
             self.choose_multiple_stores()
+
+    def compile_beer_patterns(self):
+        for search in self.params.search_beer:
+            p = re.compile(".*%s.*" % search, re.IGNORECASE)
+            self.beer_patterns.append(p)
+
+    def compile_store_patterns(self):
+        for search in self.params.search_store:
+            p = re.compile(".*%s.*" % search, re.IGNORECASE)
+            self.store_patterns.append(p)
 
     def check_cache(self, cache_file, download_uri):
         if (not os.path.isfile(cache_file) or
@@ -145,40 +161,42 @@ class Input:
         with open(self.assortment_cache, "r") as file:
             tree = ET.parse(file)
             artiklar = tree.getroot().findall('artikel')
-            patterns = []
-            for search in self.params.search_beer:
-                p = re.compile(search, re.IGNORECASE)
-                patterns.append(p)
 
             for artikel in artiklar:
-                for p in patterns:
-                    if artikel.find('Namn2').text:
-                        name = "%s %s" % (artikel.find('Namn').text,
-                                          artikel.find('Namn2').text)
-                    else:
-                        name = artikel.find('Namn').text
+                if artikel.find('Namn2').text:
+                    name = "%s %s" % (artikel.find('Namn').text,
+                                      artikel.find('Namn2').text)
+                else:
+                    name = artikel.find('Namn').text
 
-                    if p.match(name):
+                for p in self.beer_patterns:
+                    if p.match(name) and artikel.find('Utgått').text == "0":
                         pris = artikel.find('Prisinklmoms').text
-                        self.searched_beers.append(Beer(name, pris))
+                        nr = artikel.find('nr').text
+                        self.searched_beers.append(Beer(name, pris, nr))
 
     def find_store(self):
         """parse cache and search for store"""
-        with open(self.assortment_cache, "r") as file:
+        with open(self.stores_cache, "r") as file:
             tree = ET.parse(file)
             butiker = tree.getroot().findall('ButikOmbud')
-            p = re.compile(self.params.search_store, re.IGNORECASE)
             for butik in butiker:
-                name = "%s %s" % (butik.find('Namn').text,
-                                  butik.find('Address1').text)
-                if p.match(name):
-                    store_id = butik.find('Nr').text
-                    self.searched_stores.append(Store(name, store_id))
+                name = butik.find('Namn').text
+                address = butik.find('Address1').text
+                if not name:
+                    name = address
+                elif address:
+                    name = "%s %s" % (name, address)
+
+                for p in self.store_patterns:
+                    if p.match(name):
+                        store_id = butik.find('Nr').text
+                        self.searched_stores.append(Store(name, store_id))
 
     def choose_multiple_beers(self):
         """If there are multiple matches"""
         for search in self.params.search_beer:
-            p = re.compile(search, re.IGNORECASE)
+            p = re.compile(".*%s.*" % search, re.IGNORECASE)
             matches = []
             for beer in self.searched_beers:
                 if p.match(beer.name):
@@ -197,22 +215,25 @@ class Input:
 
     def choose_multiple_stores(self):
         """If there are multiple matches"""
-        p = re.compile(self.params.search_store, re.IGNORECASE)
+        pattern = ".*%s.*" % self.params.search_store
+        p = re.compile(pattern, re.IGNORECASE)
         matches = []
         for store in self.searched_stores:
             if p.match(store.name):
                 matches.append(store)
-            if len(matches) > 1:
-                # Let the user choose one
-                print("Multiple matches! Choose one of")
-                enum_stores = enumerate(matches)
-                for i,store in enum_stores:
-                    print(i, store.name)
-                no = int(input('Choose an index: '))
-                if no >= 0 and no < len(matches):
-                    self.store = matches[no]
-            else:
-                self.store = matches[0]
+        if len(matches) > 1:
+            # Let the user choose one
+            print("Multiple matches! Choose one of")
+            enum_stores = enumerate(matches)
+            for i,store in enum_stores:
+                print(i, store.name)
+            no = int(input('Choose an index: '))
+            if no >= 0 and no < len(matches):
+                self.store = matches[no]
+        elif len(matches) == 1:
+            self.store = matches[0]
+        else:
+            print("No systembolaget found.")
 
     def find_bags(self):
         bag = []
