@@ -111,6 +111,7 @@ class Input:
         self.store_assortment_cache = 'store_assortment.xml'
         self.beers = []
         self.store = None
+        self.assortment = []
         self.searched_beers = []
         self.searched_stores = []
         self.beer_patterns = []
@@ -163,8 +164,6 @@ class Input:
         if self.params.search_store:
             self.store_patterns = self.compile_patterns(self.params.search_store)
             self.check_cache(self.stores_cache, __SYSTEMBOLAGET_STORES_URI__)
-            self.check_cache(self.store_assortment_cache,
-                             __SYSTEMBOLAGET_MAPPING_URI__)
             self.find_store()
             stores = self.choose_multiple_matches([self.params.search_store],
                                                   self.searched_stores)
@@ -204,10 +203,34 @@ class Input:
                     name = artikel.find('Namn').text
 
                 for p in self.beer_patterns:
-                    if p.match(name) and artikel.find('Utgått').text == "0":
+                    name_match = p.match(name)
+                    not_discontinued = artikel.find('Utgått').text == "0"
+                    nr = artikel.find('nr').text
+                    available = self.is_available(nr)
+                    if name_match and not_discontinued and available:
                         pris = artikel.find('Prisinklmoms').text
-                        nr = artikel.find('nr').text
                         self.searched_beers.append(Beer(name, pris, nr))
+
+    def is_available(self, beer_nr):
+        return beer_nr in self.assortment
+
+    def populate_store_assortment(self):
+        if self.store.store_id:
+            self.check_cache(self.store_assortment_cache,
+                             __SYSTEMBOLAGET_MAPPING_URI__)
+            with open(self.store_assortment_cache, "r") as file:
+                tree = ET.parse(file)
+                print("Looking for %s" % self.store.store_id)
+                butik = tree.getroot().findall("./Butik[@ButikNr='%s']" % self.store.store_id)
+                if butik:
+                    print("Found store")
+                    for a in butik[0].findall('ArtikelNr'):
+                        self.assortment.append(a.text)
+                else:
+                    print("No store match in assortment file.")
+        else:
+            print("No store assigned.")
+
 
     def find_store(self):
         """parse cache and search for store"""
@@ -309,6 +332,7 @@ if __name__=='__main__':
     x = Input()
     x.parse_args()
     x.search_store()
+    x.populate_store_assortment()
     x.search_beer()
 
     print("Choosed beers:")
