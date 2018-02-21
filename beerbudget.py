@@ -66,6 +66,44 @@ class Store:
 class Input:
     """Reading and parsing input."""
 
+    @staticmethod
+    def choose_multiple_matches(search_patterns, choices):
+        """If there are multiple matches"""
+        choosed = []
+        for search in search_patterns:
+            p = re.compile(".*%s.*" % search, re.IGNORECASE)
+            matches = []
+            for c in choices:
+                if p.match(c.name):
+                    matches.append(c)
+            if len(matches) > 1:
+                print("Multiple matches! Choose one of")
+                for i,m in enumerate(matches):
+                    print(i, m.name)
+                no = int(input('Choose an index: '))
+                if no >= 0 and no < len(matches):
+                    choosed.append(matches[no])
+                else:
+                    print("None selected. Skipping.")
+            elif len(matches) == 1:
+                choosed.append(matches[0])
+            else:
+                print("No matches. Skipping.")
+        return choosed
+
+    @staticmethod
+    def compile_patterns(searches):
+        patterns = []
+        for search in searches:
+            p = re.compile(".*%s.*" % search, re.IGNORECASE)
+            patterns.append(p)
+        return patterns
+
+    @staticmethod
+    def save_cache(cache_file, content):
+        with open(cache_file, 'w') as file:
+            file.write(content)
+
     def __init__(self):
         self.params = None
         self.assortment_cache = 'assortment.xml'
@@ -113,28 +151,28 @@ class Input:
 
     def search_beer(self):
         if len(self.params.search_beer):
-            self.compile_beer_patterns()
+            self.beer_patterns = self.compile_patterns(self.params.search_beer)
             self.check_cache(self.assortment_cache, __SYSTEMBOLAGET_ASSORTMENT_URI__)
             self.find_beers()
-            self.choose_multiple_beers()
+            beers = self.choose_multiple_matches(self.params.search_beer,
+                                                 self.searched_beers)
+            self.beers += beers
+
 
     def search_store(self):
         if self.params.search_store:
-            self.compile_store_patterns()
+            self.store_patterns = self.compile_patterns(self.params.search_store)
             self.check_cache(self.stores_cache, __SYSTEMBOLAGET_STORES_URI__)
-            self.check_cache(self.store_assortment_cache, __SYSTEMBOLAGET_MAPPING_URI__)
+            self.check_cache(self.store_assortment_cache,
+                             __SYSTEMBOLAGET_MAPPING_URI__)
             self.find_store()
-            self.choose_multiple_stores()
-
-    def compile_beer_patterns(self):
-        for search in self.params.search_beer:
-            p = re.compile(".*%s.*" % search, re.IGNORECASE)
-            self.beer_patterns.append(p)
-
-    def compile_store_patterns(self):
-        for search in self.params.search_store:
-            p = re.compile(".*%s.*" % search, re.IGNORECASE)
-            self.store_patterns.append(p)
+            stores = self.choose_multiple_matches([self.params.search_store],
+                                                  self.searched_stores)
+            if stores:
+                self.store = stores[0]
+                print("Choosed %s" % self.store.name)
+            else:
+                print("No systembolaget found.")
 
     def check_cache(self, cache_file, download_uri):
         if (not os.path.isfile(cache_file) or
@@ -151,10 +189,6 @@ class Input:
         else:
             print("Error: %s %s" % (r.status, r.text))
             exit(1)
-
-    def save_cache(self, cache_file, content):
-        with open(cache_file, 'w') as file:
-            file.write(content)
 
     def find_beers(self):
         """Parse cache and search for beers"""
@@ -193,48 +227,6 @@ class Input:
                         store_id = butik.find('Nr').text
                         self.searched_stores.append(Store(name, store_id))
 
-    def choose_multiple_beers(self):
-        """If there are multiple matches"""
-        for search in self.params.search_beer:
-            p = re.compile(".*%s.*" % search, re.IGNORECASE)
-            matches = []
-            for beer in self.searched_beers:
-                if p.match(beer.name):
-                    matches.append(beer)
-            if len(matches) > 1:
-                # Let the user choose one
-                print("Multiple matches! Choose one of")
-                enum_beers = enumerate(matches)
-                for i,beer in enum_beers:
-                    print(i, beer.name, beer.price)
-                no = int(input('Choose an index: '))
-                if no >= 0 and no < len(matches):
-                    self.beers.append(matches[no])
-            else:
-                self.beers.append(matches[0])
-
-    def choose_multiple_stores(self):
-        """If there are multiple matches"""
-        pattern = ".*%s.*" % self.params.search_store
-        p = re.compile(pattern, re.IGNORECASE)
-        matches = []
-        for store in self.searched_stores:
-            if p.match(store.name):
-                matches.append(store)
-        if len(matches) > 1:
-            # Let the user choose one
-            print("Multiple matches! Choose one of")
-            enum_stores = enumerate(matches)
-            for i,store in enum_stores:
-                print(i, store.name)
-            no = int(input('Choose an index: '))
-            if no >= 0 and no < len(matches):
-                self.store = matches[no]
-        elif len(matches) == 1:
-            self.store = matches[0]
-        else:
-            print("No systembolaget found.")
-
     def find_bags(self):
         bag = []
         price = 1
@@ -250,7 +242,8 @@ class Input:
         for beer in self.beers:
             num = sum(b.name == beer.name for b in bag)
             total += num*beer.price
-            print("%s %s (%s) %s SEK" % (num, beer.name, beer.price, num*beer.price))
+            print("%s %s (%s) %s SEK" % (num, beer.name, beer.price,
+                                         num*beer.price))
         print("Total: %s SEK" % total)
 
 class Test:
@@ -259,7 +252,8 @@ class Test:
         self.download_test()
         self.check_cache_test()
 
-    def parse_arguments_test(self):
+    @staticmethod
+    def parse_arguments_test():
         """Testing reading input"""
         x = Input()
         x.parse_args('30 --beer omnipollo 29 --beer svensk kronvodka 200 --search omnipollo leon'.split())
@@ -273,7 +267,8 @@ class Test:
 
         pass
 
-    def download_test(self):
+    @staticmethod
+    def download_test():
         dummy_url = 'http://dummyurl'
         x = Input()
         try:
@@ -291,7 +286,8 @@ class Test:
         else:
             assert False
 
-    def check_cache_test(self):
+    @staticmethod
+    def check_cache_test():
         x = Input()
         x.download_cache = MagicMock(return_value=0)
         x.assortment_cache = "__TEST_CACHE_FILE__.test.tmp"
