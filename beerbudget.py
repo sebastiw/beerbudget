@@ -45,6 +45,8 @@ from decimal import Decimal
 
 from unittest.mock import MagicMock
 
+import knapsack
+
 __CACHE_TIMEOUT__ = 6*24*3600
 __SYSTEMBOLAGET_ASSORTMENT_URI__ = 'https://www.systembolaget.se/api/assortment/products/xml'
 __SYSTEMBOLAGET_STORES_URI__ = 'https://www.systembolaget.se/api/assortment/stores/xml'
@@ -250,23 +252,44 @@ class Input:
                         store_id = butik.find('Nr').text
                         self.searched_stores.append(Store(name, store_id))
 
-    def find_bags(self):
+
+class Solve:
+    @staticmethod
+    def round_robin(budget, beers):
         bag = []
         price = 1
         price0 = 0
-        while price != price0 and price <= self.params.budget:
+        while price != price0 and price <= budget:
             price = price0
-            for beer in self.beers:
-                if price0+beer.price <= self.params.budget:
+            for beer in beers:
+                if price0+beer.price <= budget:
                     bag.append(beer)
                     price0 += beer.price
 
         total = 0
-        for beer in self.beers:
+        for beer in beers:
             num = sum(b.name == beer.name for b in bag)
             total += num*beer.price
             print("%s %s (%s) %s SEK" % (num, beer.name, beer.price,
                                          num*beer.price))
+        print("Total: %s SEK" % total)
+
+    @staticmethod
+    def knapsack(budget, beers):
+        reverse_lookup = dict()
+        for b in beers:
+            if b.price in reverse_lookup:
+                reverse_lookup[b.price].append(b)
+            else:
+                reverse_lookup[b.price] = [b]
+        prices = []
+        for price in reverse_lookup.keys():
+            prices += int(budget//price)*[price]
+        total, items = knapsack.knapsack(prices, prices).solve(budget)
+        item_prices = list(map((lambda i: prices[i]), items))
+        for i in set(item_prices):
+            num = item_prices.count(i)
+            print("%s (%s) %s" % (num, i, num*i))
         print("Total: %s SEK" % total)
 
 class Test:
@@ -339,4 +362,4 @@ if __name__=='__main__':
     for beer in x.beers:
         print(beer.name, beer.price)
 
-    x.find_bags()
+    Solve.knapsack(x.params.budget, x.beers)
