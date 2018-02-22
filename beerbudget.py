@@ -8,29 +8,26 @@ __DOCSTRING__ = """
 Maximize your beer budget when going to Systembolaget.
 """
 __EXAMPLES__ = """EXAMPLES
-
->>> %(prog)s 1000 --beer omnipollo leon 29
-34 bottles of omnipollo leon (986:-)
-Total: 986:-
-
 >>> %(prog)s 1000 --beer omnipollo leon 29 --beer vodka 200
-34 bottles of omnipollo leon (986:-)
-Total: 986:-
+34 omnipollo leon (29.00) 986.00
+Total: 986.00 SEK
 
-27 bottles of omnipollo leon (783:-)
-1 bottle of vodka (200:-)
-Total: 983:-
+>>> %(prog)s 1000 --search gambrinus --search lagunitas ipa\
+                  --beer Omnipollo Leon 49.9 --systembolaget hötorg
+Choosed beers:
+11 Omnipollo Leon (49.90) 548.90 SEK
+11 Gambrinus (16.90) 185.90 SEK
+11 Lagunitas IPA (23.90) 262.90 SEK
+Total: 997.70 SEK
 
-...
-
-5 bottles of vodka (1000:-)
-Total: 1000:-
-
->>> %(prog)s 1000 --search omnipollo leon
-Searching for "omnipollo leon"... Found 750ml for 49.90:-
-
-20 bottles of omnipollo leon (998:-)
-
+>>> %(prog)s 1000 --search gambrinus --search lagunitas ipa\
+                  --beer Omnipollo Leon 49.9 --systembolaget hötorg\
+                  --algorithm knapsack
+Choosed beers:
+3 Omnipollo Leon (49.90) 149.70
+39 Gambrinus (16.90) 659.10
+8 Lagunitas IPA (23.90) 191.20
+Total: 1000.00 SEK
 """
 
 
@@ -133,6 +130,11 @@ class Input:
         self.parser.add_argument('--systembolag', dest='search_store', action='append',
                                  help='Search for beers on a specific Systembolaget.',
                                  nargs='+', metavar='NAME', default=[])
+        self.parser.add_argument('--algorithm', dest='algorithm', action='store',
+                                 default='roundrobin', type=str,
+                                 help="""How to perform the calculations,
+                                 either with roundrobin or knapsack""")
+
 
     def parse_args(self, args=None):
         self.params = self.parser.parse_args(args)
@@ -254,6 +256,17 @@ class Input:
 
 
 class Solve:
+    def __init__(self, algorithm):
+        if "roundrobin" == algorithm or "rr" == algorithm:
+            self.algo = self.round_robin
+        elif "knapsack" == algorithm or "ks" == algorithm:
+            self.algo = self.knapsack
+        else:
+            self.algo = self.round_robin
+
+    def solve(self, budget, beers):
+        self.algo(budget, beers)
+
     @staticmethod
     def round_robin(budget, beers):
         bag = []
@@ -362,4 +375,4 @@ if __name__=='__main__':
     for beer in x.beers:
         print(beer.name, beer.price)
 
-    Solve.knapsack(x.params.budget, x.beers)
+    Solve(x.params.algorithm).solve(x.params.budget, x.beers)
