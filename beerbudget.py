@@ -44,7 +44,7 @@ from unittest.mock import MagicMock
 
 import knapsack
 
-__CACHE_TIMEOUT__ = 6*24*3600
+__CACHE_TIMEOUT__ = 1*24*3600
 __SYSTEMBOLAGET_ASSORTMENT_URI__ = 'https://www.systembolaget.se/api/assortment/products/xml'
 __SYSTEMBOLAGET_STORES_URI__ = 'https://www.systembolaget.se/api/assortment/stores/xml'
 __SYSTEMBOLAGET_MAPPING_URI__ = 'https://www.systembolaget.se/api/assortment/stock/xml'
@@ -78,7 +78,10 @@ class Input:
             if len(matches) > 1:
                 print("Multiple matches! Choose one of")
                 for i,m in enumerate(matches):
-                    print(i, m.name)
+                    if hasattr(m, 'price'):
+                        print(i, m.name, m.price)
+                    else:
+                        print(i, m.name)
                 no = int(input('Choose an index: '))
                 if no >= 0 and no < len(matches):
                     choosed.append(matches[no])
@@ -87,7 +90,7 @@ class Input:
             elif len(matches) == 1:
                 choosed.append(matches[0])
             else:
-                print("No matches. Skipping.")
+                print("No matches. Skipping %s." % search)
         return choosed
 
     @staticmethod
@@ -224,7 +227,6 @@ class Input:
                              __SYSTEMBOLAGET_MAPPING_URI__)
             with open(self.store_assortment_cache, "r") as file:
                 tree = ET.parse(file)
-                print("Looking for %s" % self.store.store_id)
                 butik = tree.getroot().findall("./Butik[@ButikNr='%s']" % self.store.store_id)
                 if butik:
                     print("Found store")
@@ -261,11 +263,17 @@ class Solve:
             self.algo = self.round_robin
         elif "knapsack" == algorithm or "ks" == algorithm:
             self.algo = self.knapsack
+        elif "naive" == algorithm or "nks" == algorithm:
+            self.algo = self.naive_knapsack
         else:
             self.algo = self.round_robin
 
     def solve(self, budget, beers):
-        self.algo(budget, beers)
+        total, choosen = self.algo(budget, beers)
+        for num,beer in choosen:
+            print("%s %s (%s) %s SEK" % (num, beer.name, beer.price,
+                                         num*beer.price))
+        print("Total: %s SEK" % total)
 
     @staticmethod
     def round_robin(budget, beers):
@@ -275,17 +283,17 @@ class Solve:
         while price != price0 and price <= budget:
             price = price0
             for beer in beers:
-                if price0+beer.price <= budget:
+                if (price0+beer.price) <= budget:
                     bag.append(beer)
                     price0 += beer.price
 
         total = 0
+        num_beers = []
         for beer in beers:
             num = sum(b.name == beer.name for b in bag)
             total += num*beer.price
-            print("%s %s (%s) %s SEK" % (num, beer.name, beer.price,
-                                         num*beer.price))
-        print("Total: %s SEK" % total)
+            num_beers.append((num, beer))
+        return total, num_beers
 
     @staticmethod
     def knapsack(budget, beers):
@@ -295,15 +303,93 @@ class Solve:
                 reverse_lookup[b.price].append(b)
             else:
                 reverse_lookup[b.price] = [b]
+
         prices = []
         for price in reverse_lookup.keys():
             prices += int(budget//price)*[price]
         total, items = knapsack.knapsack(prices, prices).solve(budget)
+
         item_prices = list(map((lambda i: prices[i]), items))
-        for i in set(item_prices):
-            num = item_prices.count(i)
-            print("%s (%s) %s" % (num, i, num*i))
-        print("Total: %s SEK" % total)
+        choosen = []
+        for price in set(item_prices):
+            num = item_prices.count(price)
+            beers = reverse_lookup[price]
+            for i,b in enumerate(beers):
+                num_i = num // len(beers) + (1 if (num % len(beers) > i) else 0)
+                choosen.append((num_i, b))
+        return total, choosen
+
+    @staticmethod
+    def naive_knapsack(budget, beers, total=0, choosen=[], depth=30):
+        if 0 == budget:
+            print("No budget given")
+            return total, choosen
+
+        if 0 == total:
+            total, choosen = Solve.round_robin(budget, beers)
+
+        if budget == total:
+            print("Optimal already found")
+            return total, choosen
+
+        new_total = total
+        new_choosen = choosen[:]
+        best_bags = []
+        while depth:
+            bags = []
+            rest_budget = budget - new_total
+            for n,b in new_choosen:
+                bs = beers[:]
+                bs.remove(b)
+                bags.append((b, Solve.round_robin(rest_budget+b.price, bs)))
+
+            max_total, new_beers = Solve.take_max_bag(bags)
+
+            new_choosen = Solve.merge_beers(new_choosen, new_beers)
+            new_total += max_total
+            is_valid = True
+            for n,b in new_choosen:
+                if n < 0:
+                    is_valid = False
+                    break
+            if is_valid:
+                if budget == new_total:
+                    print("Optimal found")
+                    return new_total, new_choosen
+                best_bags.append((new_total, new_choosen))
+
+            depth -= 1
+
+        print("Depth ran out")
+        best_total = 0
+        best_beers = []
+        for n,bs in best_bags:
+            if n > best_total:
+                best_total = n
+                best_beers = bs
+
+        return best_total, best_beers
+
+    @staticmethod
+    def merge_beers(list1, list2):
+        beer_dict = {b: n for n, b in list1}
+        for n, b in list2:
+            beer_dict[b] += n
+        return [(n, b) for b,n in beer_dict.items()]
+
+    @staticmethod
+    def take_max_bag(bags):
+        max_total = 0
+        new_beers = []
+        remove = None
+        for b,(n,bs) in bags:
+            if n > max_total:
+                max_total = n
+                new_beers = bs
+                new_beers.append((-1,b))
+                remove = b
+        return max_total-remove.price, new_beers
+
 
 class Test:
     def __init__(self):
