@@ -13,7 +13,7 @@ __EXAMPLES__ = """EXAMPLES
 Total: 986.00 SEK
 
 >>> %(prog)s 1000 --search gambrinus --search lagunitas ipa\
-                  --beer Omnipollo Leon 49.9 --systembolaget hötorg
+                  --beer Omnipollo Leon 49.9 --systembolag hötorg
 Choosed beers:
 11 Omnipollo Leon (49.90) 548.90 SEK
 11 Gambrinus (16.90) 185.90 SEK
@@ -21,7 +21,7 @@ Choosed beers:
 Total: 997.70 SEK
 
 >>> %(prog)s 1000 --search gambrinus --search lagunitas ipa\
-                  --beer Omnipollo Leon 49.9 --systembolaget hötorg\
+                  --beer Omnipollo Leon 49.9 --systembolag hötorg\
                   --algorithm knapsack
 Choosed beers:
 3 Omnipollo Leon (49.90) 149.70
@@ -320,7 +320,7 @@ class Solve:
         return total, choosen
 
     @staticmethod
-    def naive_knapsack(budget, beers, total=0, choosen=[], depth=30):
+    def naive_knapsack(budget, beers, total=0, choosen=[], depth=100):
         if 0 == budget:
             print("No budget given")
             return total, choosen
