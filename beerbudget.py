@@ -123,7 +123,7 @@ class Input:
         self.parser = argparse.ArgumentParser(description=__DOCSTRING__,
                                               formatter_class=argparse.RawDescriptionHelpFormatter,
                                               epilog=__EXAMPLES__)
-        self.parser.add_argument('budget', metavar='SEK', type=int,
+        self.parser.add_argument('budget', metavar='SEK', type=Decimal,
                                  help='The budget you have in SEK')
         self.parser.add_argument('--beer', dest='beers', action='append',
                                  help='Add a beer to the calculations.', nargs='+',
