@@ -260,14 +260,14 @@ class Input:
 
 class Solve:
     def __init__(self, algorithm):
-        if "roundrobin" == algorithm or "rr" == algorithm:
+        if "roundrobin".startswith(algorithm):
             self.algo = self.round_robin
-        elif "knapsack" == algorithm or "ks" == algorithm:
+        elif "knapsack".startswith(algorithm):
             self.algo = self.knapsack
-        elif "naive" == algorithm or "nks" == algorithm:
+        elif "naive".startswith(algorithm):
             self.algo = self.naive_knapsack
         else:
-            self.algo = self.round_robin
+            self.algo = self.naive_knapsack
 
     def solve(self, budget, beers):
         total, choosen = self.algo(budget, beers)
