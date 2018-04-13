@@ -220,10 +220,10 @@ class Input:
                         self.searched_beers.append(Beer(name, pris, nr))
 
     def is_available(self, beer_nr):
-        return beer_nr in self.assortment
+        return (not self.store) or beer_nr in self.assortment
 
     def populate_store_assortment(self):
-        if self.store.store_id:
+        if self.store and self.store.store_id:
             self.check_cache(self.store_assortment_cache,
                              __SYSTEMBOLAGET_MAPPING_URI__)
             with open(self.store_assortment_cache, "r") as file:
