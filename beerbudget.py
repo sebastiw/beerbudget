@@ -36,6 +36,7 @@ import os.path
 import time
 import requests
 import re
+import sys
 
 import xml.etree.ElementTree as ET
 from decimal import Decimal
@@ -379,11 +380,12 @@ class Solve:
 
     @staticmethod
     def take_max_bag(bags):
-        max_total = 0
+        max_total = sys.maxsize
+        max_beers = 0
         new_beers = []
         remove = None
         for b,(n,bs) in bags:
-            if n > max_total:
+            if len(bs) > max_beers or (len(bs) == max_beers and n < max_total):
                 max_total = n
                 new_beers = bs
                 new_beers.append((-1,b))
