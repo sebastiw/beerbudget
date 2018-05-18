@@ -113,9 +113,9 @@ class Input:
         self.stores_cache = 'stores.xml'
         self.store_assortment_cache = 'store_assortment.xml'
         self.beers = []
+        self.fixed_beers = []
         self.store = None
         self.assortment = []
-        self.searched_beers = []
         self.searched_stores = []
         self.beer_patterns = []
         self.store_patterns = []
@@ -134,6 +134,10 @@ class Input:
         self.parser.add_argument('--systembolag', dest='search_store', action='append',
                                  help='Search for beers on a specific Systembolaget.',
                                  nargs='+', metavar='NAME', default=[])
+        self.parser.add_argument('--fixed', dest='fixed_beer', action='append',
+                                 help="""Add a fixed number of beers to the
+                                 calculations.""", nargs='+',
+                                 metavar='NAME NUMBER', default=[])
         self.parser.add_argument('--algorithm', dest='algorithm', action='store',
                                  default='roundrobin', type=str,
                                  help="""How to perform the calculations,
@@ -142,8 +146,15 @@ class Input:
 
     def parse_args(self, args=None):
         self.params = self.parser.parse_args(args)
+        self.parse_fixed()
         self.parse_beers()
         self.parse_search()
+
+    def parse_fixed(self):
+        for i in range(len(self.params.fixed_beer)):
+            name = " ".join(self.params.fixed_beer[i][0:-1])
+            number = int(self.params.fixed_beer[i][-1])
+            self.params.fixed_beer[i] = [name, number]
 
     def parse_search(self):
         for i in range(len(self.params.search_beer)):
@@ -158,15 +169,32 @@ class Input:
             price = Decimal(self.params.beers[i][-1])
             self.beers.append(Beer(name, price))
 
+    def get_fixed(self):
+        if len(self.params.fixed_beer):
+            self.check_cache(self.assortment_cache, __SYSTEMBOLAGET_ASSORTMENT_URI__)
+        for name,num in self.params.fixed_beer:
+            self.beer_patterns = self.compile_patterns([name])
+            found_beers = self.find_beers()
+            [beer] = self.choose_multiple_matches(self.params.fixed_beer,
+                                                  found_beers)
+            self.fixed_beers += [(num,beer)]
+        return self.fixed_beers
+
+    def budget_after_fixed_beers(self):
+        budget = 0
+        for num,beer in self.fixed_beers:
+            budget += beer.price*num
+            continue
+        return budget,self.params.budget-budget
+
     def search_beer(self):
         if len(self.params.search_beer):
             self.beer_patterns = self.compile_patterns(self.params.search_beer)
             self.check_cache(self.assortment_cache, __SYSTEMBOLAGET_ASSORTMENT_URI__)
-            self.find_beers()
+            found_beers = self.find_beers()
             beers = self.choose_multiple_matches(self.params.search_beer,
-                                                 self.searched_beers)
+                                                 found_beers)
             self.beers += beers
-
 
     def search_store(self):
         if self.params.search_store:
@@ -199,6 +227,7 @@ class Input:
 
     def find_beers(self):
         """Parse cache and search for beers"""
+        searched_beers = []
         with open(self.assortment_cache, "r") as file:
             tree = ET.parse(file)
             artiklar = tree.getroot().findall('artikel')
@@ -217,7 +246,8 @@ class Input:
                     available = self.is_available(nr)
                     if name_match and not_discontinued and available:
                         pris = artikel.find('Prisinklmoms').text
-                        self.searched_beers.append(Beer(name, pris, nr))
+                        searched_beers.append(Beer(name, pris, nr))
+        return searched_beers
 
     def is_available(self, beer_nr):
         return (not self.store) or beer_nr in self.assortment
@@ -270,11 +300,7 @@ class Solve:
             self.algo = self.naive_knapsack
 
     def solve(self, budget, beers):
-        total, choosen = self.algo(budget, beers)
-        for num,beer in choosen:
-            print("%s %s (%s) %s SEK" % (num, beer.name, beer.price,
-                                         num*beer.price))
-        print("Total: %s SEK" % total)
+        return self.algo(budget, beers)
 
     @staticmethod
     def round_robin(budget, beers):
@@ -459,8 +485,14 @@ if __name__=='__main__':
     x.populate_store_assortment()
     x.search_beer()
 
-    print("Choosed beers:")
-    for beer in x.beers:
-        print(beer.name, beer.price)
+    fixed = x.get_fixed()
 
-    Solve(x.params.algorithm).solve(x.params.budget, x.beers)
+    usedbudget,budgetleft = x.budget_after_fixed_beers()
+    algorithm = Solve(x.params.algorithm)
+    total,choosen = algorithm.solve(budgetleft, x.beers)
+
+    for num,beer in fixed+choosen:
+        print("%s %s (%s) %s SEK" % (num, beer.name, beer.price,
+                                     num*beer.price))
+    print("Total: %s SEK" % (total+usedbudget))
+
